@@ -202,6 +202,10 @@ func (cs *CLPAState) Stable_Init_Partition() error {
 	cs.VertexsNumInShard = make([]int, cs.ShardNum)
 	cs.PartitionMap = make(map[Vertex]int)
 	cnt := 0
+	// Assign nodes to shards
+	// NOTE: The order of nodes in the map is random, so the assignment will also be random.
+	// Nodes are assigned in sequence starting from 0 using a counter (cnt), and the shard number is determined by cnt % ShardNum.
+	// This ensures that nodes are evenly distributed across the shards.
 	for v := range cs.NetGraph.VertexSet {
 		cs.PartitionMap[v] = int(cnt) % cs.ShardNum
 		cs.VertexsNumInShard[cs.PartitionMap[v]] += 1

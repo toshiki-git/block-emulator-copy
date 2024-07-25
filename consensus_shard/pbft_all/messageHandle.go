@@ -87,6 +87,7 @@ func (p *PbftConsensusNode) handlePrePrepare(content []byte) {
 	}
 	defer p.conditionalVarpbftLock.Broadcast()
 
+	//message verification
 	flag := false
 	if digest := getDigest(ppmsg.RequestMsg); string(digest) != string(ppmsg.Digest) {
 		p.pl.Plog.Printf("S%dN%d : the digest is not consistent, so refuse to prepare. \n", p.ShardID, p.NodeID)
