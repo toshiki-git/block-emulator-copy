@@ -1,6 +1,12 @@
+import os
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+plot_save_dir = './expTest/result/figure'
+
+if not os.path.exists(plot_save_dir):
+    os.makedirs(plot_save_dir)
 
 # Read the CSV file
 file_path = './expTest/result/supervisor_measureOutput/Tx_Details.csv'  # Replace with your CSV file path
@@ -40,6 +46,10 @@ plt.legend()
 plt.title('Distribution of Confirmed Latency of This Tx (ms)')
 plt.xlabel('Confirmed Latency (ms)')
 plt.ylabel('Density')
+
+# Save the plot
+output_path = os.path.join(plot_save_dir, 'tx_distribution_brokerMethod.png')
+plt.savefig(output_path)
 
 # Show the plot
 plt.show()

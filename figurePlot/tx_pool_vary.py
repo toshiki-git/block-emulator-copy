@@ -2,8 +2,13 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
+plot_save_dir = './expTest/result/figure'
+
+if not os.path.exists(plot_save_dir):
+    os.makedirs(plot_save_dir)
+
 # Define the directory where the CSV files are stored
-directory = './expTest/result/pbft_shardNum=4'
+directory = './expTest/result/pbft_shardNum=2'
 
 # Get all CSV files in the directory
 csv_files = [f for f in os.listdir(directory) if f.endswith('.csv')]
@@ -52,4 +57,10 @@ plt.legend()
 # Show the plot
 plt.grid(True)
 plt.tight_layout()
+
+# Save the plot
+output_path = os.path.join(plot_save_dir, 'tx_pool_vary.png')
+plt.savefig(output_path)
+
+# Show the plot
 plt.show()
