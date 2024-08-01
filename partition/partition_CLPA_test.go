@@ -2,6 +2,7 @@ package partition
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -45,6 +46,34 @@ func createGraph() Graph {
 	return graph
 }
 
+// グラフを.dotファイルに出力する関数
+func writeGraphToDotFile(filename string, clpaState CLPAState) {
+	file, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	fmt.Fprintln(file, "graph G {")
+
+	// ノードごとの色設定とラベル表示
+	colors := []string{"red", "green", "blue"}
+	for v, shard := range clpaState.PartitionMap {
+		label := v.Addr[len(v.Addr)-3:]
+		fmt.Fprintf(file, "    \"%s\" [label=\"%s\", color=%s];\n", v.Addr, label, colors[shard])
+	}
+
+	for v, neighbors := range clpaState.NetGraph.EdgeSet {
+		for _, u := range neighbors {
+			if v.Addr < u.Addr {
+				fmt.Fprintf(file, "    \"%s\" -- \"%s\";\n", v.Addr, u.Addr)
+			}
+		}
+	}
+
+	fmt.Fprintln(file, "}")
+}
+
 // 初期シャード割り当てを表示する関数
 func printInitialPartition(clpaState CLPAState) {
 	fmt.Println("初期のシャードの割り当て")
@@ -81,6 +110,9 @@ func TestCLPA_Partition(t *testing.T) {
 	// 初期シャード割り当てをログに表示
 	printInitialPartition(clpaState)
 
+	// 初期グラフを.dotファイルに書き出し
+	writeGraphToDotFile("initial_partition.dot", clpaState)
+
 	// シャード分割を実行
 	fmt.Println("シャード分割を実行")
 	_, crossShardEdgeNum := clpaState.CLPA_Partition()
@@ -88,4 +120,7 @@ func TestCLPA_Partition(t *testing.T) {
 
 	// シャード分割後の結果を表示
 	printFinalPartition(clpaState, crossShardEdgeNum)
+
+	// CLPA後のグラフを.dotファイルに書き出し
+	writeGraphToDotFile("final_partition.dot", clpaState)
 }
