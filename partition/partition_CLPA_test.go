@@ -71,6 +71,16 @@ func writeGraphToDotFile(filename string, clpaState CLPAState) {
 		}
 	}
 
+	// 凡例を追加
+	fmt.Fprintln(file, "    subgraph cluster_legend {")
+	fmt.Fprintln(file, "        label = \"Shard Legend\";")
+	for i, color := range colors {
+		fmt.Fprintf(file, "        shard%d [label=\"Shard %d\", shape=box, style=filled, color=%s];\n", i, i, color)
+	}
+	fmt.Fprintln(file, "        shard0 -- shard1 [style=invis];")
+	fmt.Fprintln(file, "        shard1 -- shard2 [style=invis];")
+	fmt.Fprintln(file, "    }")
+
 	fmt.Fprintln(file, "}")
 }
 
