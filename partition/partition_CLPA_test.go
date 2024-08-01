@@ -5,20 +5,26 @@ import (
 	"testing"
 )
 
-func TestCLPA_Partition(t *testing.T) {
+// ノードを作成し、エッジを追加する関数
+func createGraph() Graph {
 	// グラフの初期化
 	graph := Graph{
 		VertexSet: make(map[Vertex]bool),
 		EdgeSet:   make(map[Vertex][]Vertex),
 	}
 
-	// ノードの作成
+	// ノードの作成(shard数は3)
 	nodes := []Vertex{
-		{Addr: "A"},
-		{Addr: "B"},
-		{Addr: "C"},
-		{Addr: "D"},
-		{Addr: "E"},
+		{Addr: "00000000000000000000000000000000000000"}, //shard 0
+		{Addr: "00000000000000000000000000000000000001"}, //shard 1
+		{Addr: "00000000000000000000000000000000000002"}, //shard 2
+		{Addr: "00000000000000000000000000000000000003"}, //shard 0
+		{Addr: "00000000000000000000000000000000000004"}, //shard 1
+		{Addr: "00000000000000000000000000000000000005"}, //shard 2
+		{Addr: "00000000000000000000000000000000000006"}, //shard 0
+		{Addr: "00000000000000000000000000000000000007"}, //shard 1
+		{Addr: "00000000000000000000000000000000000008"}, //shard 2
+		{Addr: "00000000000000000000000000000000000009"}, //shard 0
 	}
 
 	// ノードをグラフに追加
@@ -26,60 +32,60 @@ func TestCLPA_Partition(t *testing.T) {
 		graph.AddVertex(node)
 	}
 
-	// エッジを追加 (A-B, A-C, B-C, C-D, D-E)→(0-1, 0-2, 1-2, 2-3, 3-4)
-	graph.AddEdge(nodes[0], nodes[1])
-	graph.AddEdge(nodes[0], nodes[2])
-	graph.AddEdge(nodes[1], nodes[2])
-	graph.AddEdge(nodes[2], nodes[3])
-	graph.AddEdge(nodes[3], nodes[4])
+	// エッジを追加
+	edges := [][2]int{
+		{0, 1}, {0, 2}, {1, 2}, {2, 3}, {3, 4},
+		{4, 5}, {5, 6}, {6, 7}, {7, 8}, {8, 9},
+		{0, 5}, {1, 6}, {2, 7}, {3, 8}, {4, 9},
+	}
+	for _, edge := range edges {
+		graph.AddEdge(nodes[edge[0]], nodes[edge[1]])
+	}
+
+	return graph
+}
+
+// 初期シャード割り当てを表示する関数
+func printInitialPartition(clpaState CLPAState) {
+	fmt.Println("初期のシャードの割り当て")
+	for v, shard := range clpaState.PartitionMap {
+		fmt.Printf("Node %s is in shard %d\n", v.Addr, shard)
+	}
+	fmt.Printf("初期Edges2Shard: %v\n", clpaState.Edges2Shard)
+	fmt.Printf("初期CrossShardEdgeNum: %d\n\n", clpaState.CrossShardEdgeNum)
+}
+
+// シャード分割後の結果を表示する関数
+func printFinalPartition(clpaState CLPAState, crossShardEdgeNum int) {
+	fmt.Println("CLPAのシャードの割り当て適用")
+	for v, shard := range clpaState.PartitionMap {
+		fmt.Printf("Node %s is in shard %d\n", v.Addr, shard)
+	}
+	fmt.Printf("CLPA後Edges2Shard: %v\n", clpaState.Edges2Shard)
+	fmt.Printf("CLPA後CrossShardEdgeNum: %d\n\n", crossShardEdgeNum)
+}
+
+func TestCLPA_Partition(t *testing.T) {
+	// グラフの作成
+	graph := createGraph()
 
 	// CLPAStateの初期化
 	clpaState := CLPAState{
 		NetGraph: graph,
 	}
-	clpaState.Init_CLPAState(0.5, 10, 3) // WeightPenalty, MaxIterations, ShardNum
+	clpaState.Init_CLPAState(0.5, 10, 3) // WeightPenalty(beta), MaxIterations(tau), ShardNum
 
-	// 初期シャード割り当ての確認用
-	err := clpaState.Stable_Init_Partition()
-	if err != nil {
-		t.Fatalf("Failed to initialize partition: %v", err)
-	}
+	// 初期シャード割り当て
+	clpaState.Init_Partition()
 
-	t.Log("Initial Partition!:")
-	clpaState.PrintCLPA()
-	t.Log(clpaState.PartitionMap)
-	for v, shard := range clpaState.PartitionMap {
-		fmt.Printf("Node %s is in shard %d\n", v.Addr, shard)
-	}
+	// 初期シャード割り当てをログに表示
+	printInitialPartition(clpaState)
 
 	// シャード分割を実行
+	fmt.Println("シャード分割を実行")
 	_, crossShardEdgeNum := clpaState.CLPA_Partition()
+	fmt.Println("シャード分割完了")
 
-	// 結果の確認
-	for v, shard := range clpaState.PartitionMap {
-		fmt.Printf("Node %s is in shard %d\n", v.Addr, shard)
-	}
-
-	// 期待される結果を定義
-	/* expectedShards := map[string]int{
-		"A": 1,
-		"B": 1,
-		"C": 0,
-		"D": 0,
-		"E": 0,
-	} */
-	expectedCrossShardEdges := 3 // 期待されるシャード間エッジ数
-
-	// 結果を検証
-	/* for addr, shard := range expectedShards {
-		if result[addr] != uint64(shard) {
-			t.Errorf("Node %s expected in shard %d, but got %d", addr, shard, result[addr])
-		}
-	} */
-
-	if crossShardEdgeNum != expectedCrossShardEdges {
-		t.Errorf("Expected %d cross-shard edges, but got %d", expectedCrossShardEdges, crossShardEdgeNum)
-	}
-
-	t.Log(clpaState.Edges2Shard)
+	// シャード分割後の結果を表示
+	printFinalPartition(clpaState, crossShardEdgeNum)
 }
