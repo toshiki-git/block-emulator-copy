@@ -227,7 +227,12 @@ func (cs *CLPAState) getShard_score(v Vertex, uShard int) float64 {
 			Edgesto_uShard += 1
 		}
 	}
+	//v_outdegree: 自分の持つエッジの数
+	//Edgesto_uShard: uShardに接続しているエッジの数
+	//uShard: 自分が所属するシャード
+	//スコアの意味: 自分の持つエッジの数に対して、uShardに接続しているエッジの数が多いほどスコアが高くなる
 	score = float64(Edgesto_uShard) / float64(v_outdegree) * (1 - cs.WeightPenalty*float64(cs.Edges2Shard[uShard])/float64(cs.MinEdges2Shard))
+	fmt.Printf("Addr: %s, uShard: %d, score: %f, Edgesto_uShard: %d, v_outdegree: %d\n", v.Addr, uShard, score, Edgesto_uShard, v_outdegree)
 	return score
 }
 

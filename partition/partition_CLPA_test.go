@@ -112,7 +112,7 @@ func TestCLPA_Partition(t *testing.T) {
 	clpaState := CLPAState{
 		NetGraph: graph,
 	}
-	clpaState.Init_CLPAState(0.5, 10, 3) // WeightPenalty(beta), MaxIterations(tau), ShardNum
+	clpaState.Init_CLPAState(0.5, 100, 3) // WeightPenalty(beta), MaxIterations(tau), ShardNum
 
 	// 初期シャード割り当て
 	clpaState.Init_Partition()
