@@ -60,7 +60,7 @@ func writeGraphToDotFile(filename string, clpaState CLPAState) {
 	colors := []string{"red", "green", "blue"}
 	for v, shard := range clpaState.PartitionMap {
 		label := v.Addr[len(v.Addr)-3:]
-		fmt.Fprintf(file, "    \"%s\" [label=\"%s\", color=%s];\n", v.Addr, label, colors[shard])
+		fmt.Fprintf(file, "    \"%s\" [label=\"%s\", color=%s, style=filled];\n", v.Addr, label, colors[shard])
 	}
 
 	for v, neighbors := range clpaState.NetGraph.EdgeSet {
@@ -83,6 +83,7 @@ func writeGraphToDotFile(filename string, clpaState CLPAState) {
 
 	fmt.Fprintln(file, "}")
 }
+
 
 // 初期シャード割り当てを表示する関数
 func printInitialPartition(clpaState CLPAState) {
