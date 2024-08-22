@@ -76,6 +76,7 @@ func (ccm *CLPACommitteeModule) txSending(txlist []*core.Transaction) {
 	sendToShard := make(map[uint64][]*core.Transaction)
 
 	for idx := 0; idx <= len(txlist); idx++ {
+		// InjectSpeedの倍数ごとに送信
 		if idx > 0 && (idx%params.InjectSpeed == 0 || idx == len(txlist)) {
 			// send to shard
 			for sid := uint64(0); sid < uint64(params.ShardNum); sid++ {
@@ -88,6 +89,7 @@ func (ccm *CLPACommitteeModule) txSending(txlist []*core.Transaction) {
 					log.Panic(err)
 				}
 				send_msg := message.MergeMessage(message.CInject, itByte)
+				// send to leader node
 				go networks.TcpDial(send_msg, ccm.IpNodeTable[sid][0])
 			}
 			sendToShard = make(map[uint64][]*core.Transaction)

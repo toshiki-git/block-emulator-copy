@@ -236,7 +236,7 @@ func (cs *CLPAState) getShard_score(v Vertex, uShard int) float64 {
 	return score
 }
 
-// CLPA partitioning algorithm
+// CLPA partitioning algorithm returns the partition map and the number of cross-shard edges
 func (cs *CLPAState) CLPA_Partition() (map[string]uint64, int) {
 	cs.ComputeEdges2Shard()
 	fmt.Println(cs.CrossShardEdgeNum)

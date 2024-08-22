@@ -66,6 +66,7 @@ func (bc *BlockChain) SendTx2Pool(txs []*core.Transaction) {
 	bc.Txpool.AddTxs2Pool(txs)
 }
 
+// TODO: understand this function
 // handle transactions and modify the status trie
 func (bc *BlockChain) GetUpdateStatusTrie(txs []*core.Transaction) common.Hash {
 	fmt.Printf("The len of txs is %d\n", len(txs))

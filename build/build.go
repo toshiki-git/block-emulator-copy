@@ -54,6 +54,6 @@ func BuildSupervisor(nnm, snm, mod uint64) {
 
 func BuildNewPbftNode(nid, nnm, sid, snm, mod uint64) {
 	worker := pbft_all.NewPbftNode(sid, nid, initConfig(nid, nnm, sid, snm), params.CommitteeMethod[mod])
-	go worker.TcpListen() // Follower Nodes / Replica Nodes
-	worker.Propose()      // Leader Node / Primary Node
+	go worker.TcpListen() // Leader and Follower Nodes
+	worker.Propose()      // only Leader Node
 }

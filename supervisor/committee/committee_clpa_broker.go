@@ -94,6 +94,7 @@ func (ccm *CLPACommitteeMod_Broker) HandleOtherMessage(msg []byte) {
 	ccm.txSending(itxs)
 }
 
+// get shard id by address
 func (ccm *CLPACommitteeMod_Broker) fetchModifiedMap(key string) uint64 {
 	if val, ok := ccm.modifiedMap[key]; !ok {
 		return uint64(utils.Addr2Shard(key))
@@ -254,6 +255,7 @@ func (ccm *CLPACommitteeMod_Broker) clpaReset() {
 	}
 }
 
+// handle block information when received CBlockInfo message(pbft node commited)pbftノードがコミットしたとき
 func (ccm *CLPACommitteeMod_Broker) HandleBlockInfo(b *message.BlockInfoMsg) {
 	ccm.sl.Slog.Printf("received from shard %d in epoch %d.\n", b.SenderShardID, b.Epoch)
 	if atomic.CompareAndSwapInt32(&ccm.curEpoch, int32(b.Epoch-1), int32(b.Epoch)) {
@@ -314,12 +316,14 @@ func (ccm *CLPACommitteeMod_Broker) dealTxByBroker(txs []*core.Transaction) (itx
 		sSid := ccm.fetchModifiedMap(tx.Sender)
 		ccm.clpaLock.Unlock()
 		if rSid != sSid && !ccm.broker.IsBroker(tx.Recipient) && !ccm.broker.IsBroker(tx.Sender) {
+			// Cross shard transaction. BrokerChain context
 			brokerRawMeg := &message.BrokerRawMeg{
 				Tx:     tx,
 				Broker: ccm.broker.BrokerAddress[0],
 			}
 			brokerRawMegs = append(brokerRawMegs, brokerRawMeg)
 		} else {
+			// Inner shard transaction. BrokerChain context
 			if ccm.broker.IsBroker(tx.Recipient) || ccm.broker.IsBroker(tx.Sender) {
 				tx.HasBroker = true
 				tx.SenderIsBroker = ccm.broker.IsBroker(tx.Sender)
@@ -388,6 +392,7 @@ func (ccm *CLPACommitteeMod_Broker) getBrokerRawMagDigest(r *message.BrokerRawMe
 	return hash[:]
 }
 
+// handle broker raw message(Cross shard transaction)
 func (ccm *CLPACommitteeMod_Broker) handleBrokerRawMag(brokerRawMags []*message.BrokerRawMeg) {
 	b := ccm.broker
 	brokerType1Mags := make([]*message.BrokerType1Meg, 0)
