@@ -315,6 +315,7 @@ func (ccm *CLPACommitteeMod_Broker) dealTxByBroker(txs []*core.Transaction) (itx
 		rSid := ccm.fetchModifiedMap(tx.Recipient)
 		sSid := ccm.fetchModifiedMap(tx.Sender)
 		ccm.clpaLock.Unlock()
+		//　どっちもブローカーじゃないし、受信者と送信者が違うシャード場合
 		if rSid != sSid && !ccm.broker.IsBroker(tx.Recipient) && !ccm.broker.IsBroker(tx.Sender) {
 			// Cross shard transaction. BrokerChain context
 			brokerRawMeg := &message.BrokerRawMeg{
