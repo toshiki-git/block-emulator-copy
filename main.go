@@ -35,7 +35,7 @@ func main() {
 	pflag.IntVarP(&nodeNum, "nodeNum", "N", params.NodesInShard, "nodeNum is an Integer, which indicates how many nodes of each shard are deployed. ")
 	pflag.IntVarP(&shardID, "shardID", "s", 0, "shardID is an Integer, which indicates the ID of the shard to which this node belongs. Value range: [0, shardNum). ")
 	pflag.IntVarP(&nodeID, "nodeID", "n", 0, "nodeID is an Integer, which indicates the ID of this node. Value range: [0, nodeNum).")
-	pflag.IntVarP(&modID, "modID", "m", 3, "modID is an Integer, which indicates the choice ID of methods / consensuses. Value range: [0, 4), representing [CLPA_Broker, CLPA, Broker, Relay]")
+	pflag.IntVarP(&modID, "modID", "m", 3, "modID is an Integer, which indicates the choice ID of methods / consensuses. Value range: [0, 5), representing [CLPA_Broker, CLPA, Broker, Relay, CLPA_Proposal]")
 	pflag.StringVarP(&dataRootDir, "dataRootDir", "d", params.ExpDataRootDir, "dataRootDir is a string, which defines the RootDir of the experimental data, including ./log, ./record and ./result")
 	pflag.BoolVarP(&isSupervisor, "supervisor", "c", false, "isSupervisor is a bool value, which indicates whether this node is a supervisor.")
 	pflag.BoolVarP(&isGen, "gen", "g", false, "isGen is a bool value, which indicates whether to generate a batch file")

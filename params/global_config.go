@@ -23,5 +23,8 @@ var (
 	SupervisorAddr = "127.0.0.1:18800"        // Supervisor ip address
 	FileInput      = `./selectedTxs_300K.csv` // The raw BlockTransaction data path
 
+	// Proposal
+	InternalTxFileInput = `../20000000to20249999_InternalTransaction_subset.csv` // The internal transaction data path
+
 	ReconfigTimeGap = 50 // The time gap between epochs. This variable is only used in CLPA / CLPA_Broker now. (unit: second)
 )
