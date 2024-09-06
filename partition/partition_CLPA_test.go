@@ -1,6 +1,7 @@
 package partition
 
 import (
+	"encoding/csv"
 	"fmt"
 	"os"
 	"testing"
@@ -84,7 +85,6 @@ func writeGraphToDotFile(filename string, clpaState CLPAState) {
 	fmt.Fprintln(file, "}")
 }
 
-
 // 初期シャード割り当てを表示する関数
 func printInitialPartition(clpaState CLPAState) {
 	fmt.Println("初期のシャードの割り当て")
@@ -123,6 +123,120 @@ func TestCLPA_Partition(t *testing.T) {
 
 	// 初期グラフを.dotファイルに書き出し
 	writeGraphToDotFile("initial_partition.dot", clpaState)
+
+	// シャード分割を実行
+	fmt.Println("シャード分割を実行")
+	_, crossShardEdgeNum := clpaState.CLPA_Partition()
+	fmt.Println("シャード分割完了")
+
+	// シャード分割後の結果を表示
+	printFinalPartition(clpaState, crossShardEdgeNum)
+
+	// CLPA後のグラフを.dotファイルに書き出し
+	writeGraphToDotFile("final_partition.dot", clpaState)
+}
+
+// ノードを作成し、エッジを追加する関数
+func createGraphFromCSV(blockTxFile, internalTxFile string) (Graph, error) {
+	// グラフの初期化
+	graph := Graph{
+		VertexSet: make(map[Vertex]bool),
+		EdgeSet:   make(map[Vertex][]Vertex),
+	}
+
+	// Block Transaction CSVからノードとエッジを追加
+	blockFile, err := os.Open(blockTxFile)
+	if err != nil {
+		return graph, err
+	}
+	defer blockFile.Close()
+
+	blockReader := csv.NewReader(blockFile)
+	blockTxData, err := blockReader.ReadAll()
+	if err != nil {
+		return graph, err
+	}
+
+	for _, row := range blockTxData[1:] { // Skip header
+		if len(row) < 6 {
+			fmt.Println("Invalid block transaction row, skipping:", row)
+			continue // 不正なデータ行をスキップ
+		}
+		fromAddr := row[3] // `from` カラム
+		toAddr := row[4]   // `to` カラム
+
+		fromVertex := Vertex{Addr: fromAddr}
+		toVertex := Vertex{Addr: toAddr}
+
+		// ノードを追加
+		graph.AddVertex(fromVertex)
+		graph.AddVertex(toVertex)
+
+		// エッジを追加
+		graph.AddEdge(fromVertex, toVertex)
+	}
+
+	// Internal Transaction CSVからノードとエッジを追加
+	internalFile, err := os.Open(internalTxFile)
+	if err != nil {
+		return graph, err
+	}
+	defer internalFile.Close()
+
+	internalReader := csv.NewReader(internalFile)
+	internalTxData, err := internalReader.ReadAll()
+	if err != nil {
+		return graph, err
+	}
+
+	for _, row := range internalTxData[1:] { // Skip header
+		if len(row) < 7 {
+			fmt.Println("Invalid internal transaction row, skipping:", row)
+			continue // 不正なデータ行をスキップ
+		}
+		fromAddr := row[4] // `from` カラム
+		toAddr := row[5]   // `to` カラム
+
+		fromVertex := Vertex{Addr: fromAddr}
+		toVertex := Vertex{Addr: toAddr}
+
+		// ノードを追加
+		graph.AddVertex(fromVertex)
+		graph.AddVertex(toVertex)
+
+		// エッジを追加
+		graph.AddEdge(fromVertex, toVertex)
+	}
+
+	return graph, nil
+}
+
+// メインテスト関数でグラフ作成を呼び出す
+func TestCLPA_PartitionFromCSV(t *testing.T) {
+	// CSVファイルからグラフを作成
+	blockTxFile := "../20000000to20249999_BlockTransaction_subset.csv"
+	internalTxFile := "../20000000to20249999_InternalTransaction_subset.csv"
+	fmt.Println("Creating graph from CSV files...")
+	graph, err := createGraphFromCSV(blockTxFile, internalTxFile)
+	if err != nil {
+		t.Fatalf("Error creating graph: %v", err)
+	}
+
+	for v := range graph.VertexSet {
+		fmt.Println(v.Addr)
+	}
+
+	// CLPAStateの初期化
+	clpaState := CLPAState{
+		NetGraph: graph,
+	}
+	clpaState.Init_CLPAState(0.5, 100, 3) // WeightPenalty(beta), MaxIterations(tau), ShardNum
+
+	// 初期シャード割り当て
+	clpaState.Init_Partition() //これがエラー原因
+
+	// 初期シャード割り当てをログに表示
+	printInitialPartition(clpaState)
 
 	// シャード分割を実行
 	fmt.Println("シャード分割を実行")
