@@ -1,1 +1,4 @@
 go test -v -count=1 -run ^TestCLPA_Partition$ ./partition/
+go test -v -count=1 -run ^TestCLPA_PartitionFromCSV$ ./partition/
+go test -v -count=1 -run ^TestLoadInternalTxsFromCSV$ ./supervisor/committee
+go test -v -count=1 -run ^TestData2txWithContract$ ./supervisor/committee
