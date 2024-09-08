@@ -7,8 +7,14 @@ import (
 	"testing"
 )
 
+const (
+	WeightPenalty = 0.5
+	MaxIterations = 100
+	ShardNum      = 10
+)
+
 // ノードを作成し、エッジを追加する関数
-func createGraph() Graph {
+/* func createGraph() Graph {
 	// グラフの初期化
 	graph := Graph{
 		VertexSet: make(map[Vertex]bool),
@@ -45,10 +51,21 @@ func createGraph() Graph {
 	}
 
 	return graph
+} */
+
+var predefinedColors = []string{
+	"red", "green", "blue", "yellow", "purple", "orange", "pink",
+	"cyan", "brown", "magenta", "lime", "indigo", "violet",
+	// 必要に応じてさらに色を追加
 }
 
-// グラフを.dotファイルに出力する関数
-func writeGraphToDotFile(filename string, clpaState CLPAState) {
+// シャード番号に応じて色を取得する関数
+func getColorForShard(shard int) string {
+	return predefinedColors[shard%len(predefinedColors)] // シャード数が色の数を超えたら循環させる
+}
+
+// グラフを.dotファイルに出力する関数（スマートコントラクトと通常アカウントの視覚的区別付き）
+func writeGraphToDotFile(filename string, clpaState CLPAState, contractAddrs map[string]bool) {
 	file, err := os.Create(filename)
 	if err != nil {
 		panic(err)
@@ -58,12 +75,21 @@ func writeGraphToDotFile(filename string, clpaState CLPAState) {
 	fmt.Fprintln(file, "graph G {")
 
 	// ノードごとの色設定とラベル表示
-	colors := []string{"red", "green", "blue"}
 	for v, shard := range clpaState.PartitionMap {
 		label := v.Addr[len(v.Addr)-3:]
-		fmt.Fprintf(file, "    \"%s\" [label=\"%s\", color=%s, style=filled];\n", v.Addr, label, colors[shard])
+		color := getColorForShard(shard) // シャード番号に応じて色を取得
+
+		// スマートコントラクトかどうかを確認
+		if contractAddrs[v.Addr] {
+			// スマートコントラクトは四角で表示
+			fmt.Fprintf(file, "    \"%s\" [label=\"%s\", color=\"%s\", shape=box, style=filled];\n", v.Addr, label, color)
+		} else {
+			// 通常アカウントは丸で表示
+			fmt.Fprintf(file, "    \"%s\" [label=\"%s\", color=\"%s\", shape=circle, style=filled];\n", v.Addr, label, color)
+		}
 	}
 
+	// エッジを追加
 	for v, neighbors := range clpaState.NetGraph.EdgeSet {
 		for _, u := range neighbors {
 			if v.Addr < u.Addr {
@@ -75,11 +101,10 @@ func writeGraphToDotFile(filename string, clpaState CLPAState) {
 	// 凡例を追加
 	fmt.Fprintln(file, "    subgraph cluster_legend {")
 	fmt.Fprintln(file, "        label = \"Shard Legend\";")
-	for i, color := range colors {
-		fmt.Fprintf(file, "        shard%d [label=\"Shard %d\", shape=box, style=filled, color=%s];\n", i, i, color)
+	for i := 0; i < ShardNum; i++ { // シャード数に応じて動的に生成
+		color := getColorForShard(i)
+		fmt.Fprintf(file, "        shard%d [label=\"Shard %d\", shape=box, style=filled, color=\"%s\"];\n", i, i, color)
 	}
-	fmt.Fprintln(file, "        shard0 -- shard1 [style=invis];")
-	fmt.Fprintln(file, "        shard1 -- shard2 [style=invis];")
 	fmt.Fprintln(file, "    }")
 
 	fmt.Fprintln(file, "}")
@@ -105,7 +130,7 @@ func printFinalPartition(clpaState CLPAState, crossShardEdgeNum int) {
 	fmt.Printf("CLPA後CrossShardEdgeNum: %d\n\n", crossShardEdgeNum)
 }
 
-func TestCLPA_Partition(t *testing.T) {
+/* func TestCLPA_Partition(t *testing.T) {
 	// グラフの作成
 	graph := createGraph()
 
@@ -134,39 +159,52 @@ func TestCLPA_Partition(t *testing.T) {
 
 	// CLPA後のグラフを.dotファイルに書き出し
 	writeGraphToDotFile("final_partition.dot", clpaState)
-}
+} */
 
-// ノードを作成し、エッジを追加する関数
-func createGraphFromCSV(blockTxFile, internalTxFile string) (Graph, error) {
+// ノードを作成し、エッジを追加する関数（スマートコントラクトの判断を含む）
+func createGraphFromCSV(blockTxFile, internalTxFile string) (Graph, map[string]bool, error) {
 	// グラフの初期化
 	graph := Graph{
 		VertexSet: make(map[Vertex]bool),
 		EdgeSet:   make(map[Vertex][]Vertex),
 	}
 
+	// スマートコントラクトアドレスを保持するマップ
+	contractAddrs := make(map[string]bool)
+
 	// Block Transaction CSVからノードとエッジを追加
 	blockFile, err := os.Open(blockTxFile)
 	if err != nil {
-		return graph, err
+		return graph, contractAddrs, err
 	}
 	defer blockFile.Close()
 
 	blockReader := csv.NewReader(blockFile)
 	blockTxData, err := blockReader.ReadAll()
 	if err != nil {
-		return graph, err
+		return graph, contractAddrs, err
 	}
 
 	for _, row := range blockTxData[1:] { // Skip header
-		if len(row) < 6 {
+		if len(row) < 8 {
 			fmt.Println("Invalid block transaction row, skipping:", row)
 			continue // 不正なデータ行をスキップ
 		}
-		fromAddr := row[3] // `from` カラム
-		toAddr := row[4]   // `to` カラム
+		fromAddr := row[3]              // `from` カラム
+		toAddr := row[4]                // `to` カラム
+		fromIsContract := row[6] == "1" // `fromIsContract` カラム
+		toIsContract := row[7] == "1"   // `toIsContract` カラム
 
 		fromVertex := Vertex{Addr: fromAddr}
 		toVertex := Vertex{Addr: toAddr}
+
+		// スマートコントラクトをマップに追加
+		if fromIsContract {
+			contractAddrs[fromAddr] = true
+		}
+		if toIsContract {
+			contractAddrs[toAddr] = true
+		}
 
 		// ノードを追加
 		graph.AddVertex(fromVertex)
@@ -179,26 +217,36 @@ func createGraphFromCSV(blockTxFile, internalTxFile string) (Graph, error) {
 	// Internal Transaction CSVからノードとエッジを追加
 	internalFile, err := os.Open(internalTxFile)
 	if err != nil {
-		return graph, err
+		return graph, contractAddrs, err
 	}
 	defer internalFile.Close()
 
 	internalReader := csv.NewReader(internalFile)
 	internalTxData, err := internalReader.ReadAll()
 	if err != nil {
-		return graph, err
+		return graph, contractAddrs, err
 	}
 
 	for _, row := range internalTxData[1:] { // Skip header
-		if len(row) < 7 {
+		if len(row) < 9 {
 			fmt.Println("Invalid internal transaction row, skipping:", row)
 			continue // 不正なデータ行をスキップ
 		}
-		fromAddr := row[4] // `from` カラム
-		toAddr := row[5]   // `to` カラム
+		fromAddr := row[4]              // `from` カラム
+		toAddr := row[5]                // `to` カラム
+		fromIsContract := row[6] == "1" // `fromIsContract` カラム
+		toIsContract := row[7] == "1"   // `toIsContract` カラム
 
 		fromVertex := Vertex{Addr: fromAddr}
 		toVertex := Vertex{Addr: toAddr}
+
+		// スマートコントラクトをマップに追加
+		if fromIsContract {
+			contractAddrs[fromAddr] = true
+		}
+		if toIsContract {
+			contractAddrs[toAddr] = true
+		}
 
 		// ノードを追加
 		graph.AddVertex(fromVertex)
@@ -208,7 +256,7 @@ func createGraphFromCSV(blockTxFile, internalTxFile string) (Graph, error) {
 		graph.AddEdge(fromVertex, toVertex)
 	}
 
-	return graph, nil
+	return graph, contractAddrs, nil
 }
 
 // メインテスト関数でグラフ作成を呼び出す
@@ -217,23 +265,24 @@ func TestCLPA_PartitionFromCSV(t *testing.T) {
 	blockTxFile := "../20000000to20249999_BlockTransaction_subset.csv"
 	internalTxFile := "../20000000to20249999_InternalTransaction_subset.csv"
 	fmt.Println("Creating graph from CSV files...")
-	graph, err := createGraphFromCSV(blockTxFile, internalTxFile)
+	graph, contractAddrs, err := createGraphFromCSV(blockTxFile, internalTxFile)
 	if err != nil {
 		t.Fatalf("Error creating graph: %v", err)
 	}
 
-	for v := range graph.VertexSet {
-		fmt.Println(v.Addr)
+	// スマートコントラクトアドレスの確認
+	for addr := range contractAddrs {
+		fmt.Println("Smart contract address:", addr)
 	}
 
 	// CLPAStateの初期化
 	clpaState := CLPAState{
 		NetGraph: graph,
 	}
-	clpaState.Init_CLPAState(0.5, 100, 3) // WeightPenalty(beta), MaxIterations(tau), ShardNum
+	clpaState.Init_CLPAState(WeightPenalty, MaxIterations, ShardNum) // WeightPenalty(beta), MaxIterations(tau), ShardNum
 
 	// 初期シャード割り当て
-	clpaState.Init_Partition() //これがエラー原因
+	clpaState.Init_Partition()
 
 	// 初期シャード割り当てをログに表示
 	printInitialPartition(clpaState)
@@ -246,6 +295,6 @@ func TestCLPA_PartitionFromCSV(t *testing.T) {
 	// シャード分割後の結果を表示
 	printFinalPartition(clpaState, crossShardEdgeNum)
 
-	// CLPA後のグラフを.dotファイルに書き出し
-	writeGraphToDotFile("final_partition.dot", clpaState)
+	// CLPA後のグラフを.dotファイルに書き出し（スマートコントラクトを考慮）
+	writeGraphToDotFile("final_partition.dot", clpaState, contractAddrs)
 }
