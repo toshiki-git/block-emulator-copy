@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -17,7 +18,7 @@ const (
 	IsLoadInternalTx        = true
 	IsUseContractAccounts   = true // スマートコントラクトアカウントを含むデータをスキップ
 	BlockTxFilePath         = "../20000000to20249999_BlockTransaction.csv"
-	MaxBlockTxFileRows      = 103
+	ReadBlockNumber         = 20000050
 	InternalTxFilePath      = "../20000000to20249999_InternalTransaction_1000000rows.csv"
 )
 
@@ -139,8 +140,8 @@ func addEdgeToGraph(graph *Graph, fromAddr, toAddr string) {
 	graph.AddEdge(fromVertex, toVertex)
 }
 
-// CSVファイルを読み込む関数
-func readTxCSV(filename string, maxRows int) ([][]string, error) {
+// CSVファイルを blockNumber に基づいて読み込む関数
+func readTxCSVUntilBlock(filename string, maxBlockNumber int) ([][]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -151,18 +152,31 @@ func readTxCSV(filename string, maxRows int) ([][]string, error) {
 	_, _ = reader.Read() // ヘッダーをスキップ
 
 	var data [][]string
-	for i := 0; i < maxRows; i++ {
+	for {
 		row, err := reader.Read()
 		if err != nil {
 			break
 		}
+
+		// blockNumber が maxBlockNumber を超えたら読み込み終了
+		blockNumber := parseBlockNumber(row[0]) // blockNumber が1列目にあると仮定
+		if blockNumber > maxBlockNumber {
+			break
+		}
+
 		data = append(data, row)
 	}
 	return data, nil
 }
 
-// InternalTransactionを読み込む関数
-func readInternalTxCSVUntilHash(internalTxFile, lastTxHash string) ([][]string, error) {
+// blockNumber をパースするためのヘルパー関数
+func parseBlockNumber(blockNumberStr string) int {
+	blockNumber, _ := strconv.Atoi(blockNumberStr) // エラーは無視するか、エラーハンドリングを追加
+	return blockNumber
+}
+
+// InternalTransactionを blockNumber に基づいて読み込む関数
+func readInternalTxCSVUntilBlock(internalTxFile string, maxBlockNumber int) ([][]string, error) {
 	file, err := os.Open(internalTxFile)
 	if err != nil {
 		return nil, err
@@ -173,27 +187,18 @@ func readInternalTxCSVUntilHash(internalTxFile, lastTxHash string) ([][]string, 
 	_, _ = reader.Read() // ヘッダーをスキップ
 
 	var data [][]string
-	var foundLastTxHash bool // lastTxHashが見つかったかどうかを示すフラグ
-
 	for {
 		row, err := reader.Read()
 		if err != nil {
-			break // ファイルの終端またはエラーでループ終了
-		}
-
-		txHash := row[2] // トランザクションハッシュ（3列目）
-
-		// lastTxHashが見つかったかどうかを確認
-		if txHash == lastTxHash {
-			foundLastTxHash = true
-		}
-
-		// lastTxHashが見つかっていて、異なるトランザクションハッシュが出たらループ終了
-		if foundLastTxHash && txHash != lastTxHash {
 			break
 		}
 
-		// データを常に追加
+		// blockNumber が maxBlockNumber を超えたら読み込み終了
+		blockNumber := parseBlockNumber(row[1]) // InternalTransactionで blockNumber が2列目にあると仮定
+		if blockNumber > maxBlockNumber {
+			break
+		}
+
 		data = append(data, row)
 	}
 	return data, nil
@@ -210,7 +215,7 @@ func printPartition(clpaState CLPAState, label string) {
 }
 
 // CSVファイルからグラフを作成
-func createGraphFromCSV(blockTxFilePath, internalTxFilePath string) (Graph, map[string]bool, error) {
+func createGraphFromCSV(blockTxFilePath, internalTxFilePath string, maxBlockNumber int) (Graph, map[string]bool, error) {
 	graph := Graph{
 		VertexSet: make(map[Vertex]bool),
 		EdgeSet:   make(map[Vertex][]Vertex),
@@ -218,18 +223,15 @@ func createGraphFromCSV(blockTxFilePath, internalTxFilePath string) (Graph, map[
 	contractAddrs := make(map[string]bool)
 
 	// Block Transaction CSVの読み込み
-	blockTxData, err := readTxCSV(blockTxFilePath, MaxBlockTxFileRows)
+	blockTxData, err := readTxCSVUntilBlock(blockTxFilePath, maxBlockNumber)
 	if err != nil {
 		return graph, contractAddrs, err
 	}
 	processTxData(blockTxData, &graph, contractAddrs)
 
-	// BlockTransactionの最後のTXハッシュを取得
-	lastTxHash := blockTxData[len(blockTxData)-1][2]
-
 	// Internal Transaction CSVの読み込み
 	if IsLoadInternalTx {
-		internalTxData, err := readInternalTxCSVUntilHash(internalTxFilePath, lastTxHash)
+		internalTxData, err := readInternalTxCSVUntilBlock(internalTxFilePath, maxBlockNumber)
 		if err != nil {
 			return graph, contractAddrs, err
 		}
@@ -242,7 +244,7 @@ func createGraphFromCSV(blockTxFilePath, internalTxFilePath string) (Graph, map[
 // メインテスト関数
 func TestCLPA_PartitionFromCSV(t *testing.T) {
 	fmt.Println("Creating graph from CSV files...")
-	graph, contractAddrs, err := createGraphFromCSV(BlockTxFilePath, InternalTxFilePath)
+	graph, contractAddrs, err := createGraphFromCSV(BlockTxFilePath, InternalTxFilePath, ReadBlockNumber)
 	if err != nil {
 		t.Fatalf("Error creating graph: %v", err)
 	}
