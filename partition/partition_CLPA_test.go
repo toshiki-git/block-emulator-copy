@@ -194,7 +194,7 @@ func readInternalTxCSVUntilBlock(internalTxFile string, maxBlockNumber int) ([][
 		}
 
 		// blockNumber が maxBlockNumber を超えたら読み込み終了
-		blockNumber := parseBlockNumber(row[1]) // InternalTransactionで blockNumber が2列目にあると仮定
+		blockNumber := parseBlockNumber(row[0]) // InternalTransactionで blockNumber が2列目にあると仮定
 		if blockNumber > maxBlockNumber {
 			break
 		}
