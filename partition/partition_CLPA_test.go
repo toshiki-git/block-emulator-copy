@@ -4,21 +4,23 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"testing"
+	"time"
 )
 
 // 定数
 const (
 	WeightPenalty           = 0.5
 	MaxIterations           = 100
-	ShardNum                = 3
+	ShardNum                = 8
 	AccountGraphShape       = "circle"
 	SmartContractGraphShape = "box"
 	IsLoadInternalTx        = true
-	IsUseContractAccounts   = true // スマートコントラクトアカウントを含むデータをスキップ
-	BlockTxFilePath         = "../20000000to20249999_BlockTransaction.csv"
-	ReadBlockNumber         = 20000050
+	IsSkipContractTx        = false // コントラクトのトランザクションをスキップするかどうか
+	BlockTxFilePath         = "../20000000to20249999_BlockTransaction_1000000rows.csv"
+	ReadBlockNumber         = 20000816
 	InternalTxFilePath      = "../20000000to20249999_InternalTransaction_1000000rows.csv"
 )
 
@@ -73,13 +75,33 @@ func writeNodes(file *os.File, clpaState CLPAState, contractAddrs map[string]boo
 
 // エッジ情報を書き込む
 func writeEdges(file *os.File, clpaState CLPAState) {
+	edgeSet := make(map[string]bool) // 重複を防ぐためのエッジセット
 	for v, neighbors := range clpaState.NetGraph.EdgeSet {
 		for _, u := range neighbors {
-			if v.Addr < u.Addr {
+			// エッジのソート済みのキーを作成 (例えば "addr1--addr2" の形式)
+			key := fmt.Sprintf("%s--%s", min(v.Addr, u.Addr), max(v.Addr, u.Addr))
+
+			if !edgeSet[key] { // エッジがまだ追加されていない場合
 				fmt.Fprintf(file, "    \"%s\" -- \"%s\";\n", v.Addr, u.Addr)
+				edgeSet[key] = true // エッジをセットに追加
 			}
 		}
 	}
+}
+
+// v.Addr と u.Addr の小さい方と大きい方を比較するためのヘルパー関数
+func min(a, b string) string {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b string) string {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // 凡例を書き込む
@@ -93,6 +115,13 @@ func writeLegend(file *os.File) {
 	fmt.Fprintln(file, "    }")
 }
 
+// 正しいアドレス形式かをチェックする関数
+func isValidAddress(addr string) bool {
+	// アドレスが "0x" で始まり、40文字の16進数であるかを確認
+	match, _ := regexp.MatchString(`^0x[0-9a-fA-F]{40}$`, addr)
+	return match
+}
+
 // ノードとエッジを追加
 func processTxData(data [][]string, graph *Graph, contractAddrs map[string]bool) {
 	for _, row := range data {
@@ -100,14 +129,24 @@ func processTxData(data [][]string, graph *Graph, contractAddrs map[string]bool)
 		fromIsContract := row[6] == "1"
 		toIsContract := row[7] == "1"
 
-		if IsUseContractAccounts {
-			if fromIsContract {
-				contractAddrs[fromAddr] = true
-			}
-			if toIsContract {
-				contractAddrs[toAddr] = true
-			}
+		// 不正なアドレスをスキップ
+		if !isValidAddress(fromAddr) || !isValidAddress(toAddr) {
+			fmt.Printf("Skipping invalid address: from %s, to %s\n", fromAddr, toAddr)
+			continue
 		}
+
+		// コントラクトのトランザクションをスキップする場合
+		if IsSkipContractTx && (fromIsContract || toIsContract) {
+			continue
+		}
+
+		if fromIsContract {
+			contractAddrs[fromAddr] = true
+		}
+		if toIsContract {
+			contractAddrs[toAddr] = true
+		}
+
 		addEdgeToGraph(graph, fromAddr, toAddr)
 	}
 }
@@ -119,14 +158,23 @@ func processInternalTxData(data [][]string, graph *Graph, contractAddrs map[stri
 		fromIsContract := row[6] == "1"
 		toIsContract := row[7] == "1"
 
-		if IsUseContractAccounts {
-			if fromIsContract {
-				contractAddrs[fromAddr] = true
-			}
-			if toIsContract {
-				contractAddrs[toAddr] = true
-			}
+		// 不正なアドレスをスキップ
+		if !isValidAddress(fromAddr) || !isValidAddress(toAddr) {
+			fmt.Printf("Skipping invalid address: from %s, to %s\n", fromAddr, toAddr)
+			continue
 		}
+
+		if IsSkipContractTx && (fromIsContract || toIsContract) {
+			continue
+		}
+
+		if fromIsContract {
+			contractAddrs[fromAddr] = true
+		}
+		if toIsContract {
+			contractAddrs[toAddr] = true
+		}
+
 		addEdgeToGraph(graph, fromAddr, toAddr)
 	}
 }
@@ -166,6 +214,7 @@ func readTxCSVUntilBlock(filename string, maxBlockNumber int) ([][]string, error
 
 		data = append(data, row)
 	}
+	fmt.Printf("Read %d rows from %s\n", len(data), filename)
 	return data, nil
 }
 
@@ -201,17 +250,26 @@ func readInternalTxCSVUntilBlock(internalTxFile string, maxBlockNumber int) ([][
 
 		data = append(data, row)
 	}
+	fmt.Printf("Read %d rows from %s\n", len(data), internalTxFile)
 	return data, nil
 }
 
-// 初期シャード割り当てを表示する関数
-func printPartition(clpaState CLPAState, label string) {
-	fmt.Printf("%sのシャードの割り当て:\n", label)
-	for v, shard := range clpaState.PartitionMap {
-		fmt.Printf("Node %s is in shard %d\n", v.Addr, shard)
+// 初期シャード割り当てを表示する関数（ファイル出力対応）
+func printPartitionToFile(clpaState CLPAState, label string, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
 	}
-	fmt.Printf("Edges2Shard: %v\n", clpaState.Edges2Shard)
-	fmt.Printf("CrossShardEdgeNum: %d\n\n", clpaState.CrossShardEdgeNum)
+	defer file.Close()
+
+	fmt.Fprintf(file, "%sのシャードの割り当て:\n", label)
+	for v, shard := range clpaState.PartitionMap {
+		fmt.Fprintf(file, "Node %s is in shard %d\n", v.Addr, shard)
+	}
+	fmt.Fprintf(file, "Edges2Shard: %v\n", clpaState.Edges2Shard)
+	fmt.Fprintf(file, "CrossShardEdgeNum: %d\n\n", clpaState.CrossShardEdgeNum)
+
+	return nil
 }
 
 // CSVファイルからグラフを作成
@@ -241,6 +299,20 @@ func createGraphFromCSV(blockTxFilePath, internalTxFilePath string, maxBlockNumb
 	return graph, contractAddrs, nil
 }
 
+// スマートコントラクトアドレスをファイルに出力する関数
+func printContractAddrsToFile(contractAddrs map[string]bool, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	for addr := range contractAddrs {
+		fmt.Fprintf(file, "%s\n", addr)
+	}
+	return nil
+}
+
 // メインテスト関数
 func TestCLPA_PartitionFromCSV(t *testing.T) {
 	fmt.Println("Creating graph from CSV files...")
@@ -249,21 +321,33 @@ func TestCLPA_PartitionFromCSV(t *testing.T) {
 		t.Fatalf("Error creating graph: %v", err)
 	}
 
-	for addr := range contractAddrs {
-		fmt.Println("Smart contract address:", addr)
+	// スマートコントラクトアドレスをファイルに出力
+	err = printContractAddrsToFile(contractAddrs, "smart_contract_addresses.txt")
+	if err != nil {
+		t.Fatalf("Error writing contract addresses to file: %v", err)
 	}
 
 	clpaState := CLPAState{NetGraph: graph}
 	clpaState.Init_CLPAState(WeightPenalty, MaxIterations, ShardNum)
 	clpaState.Init_Partition()
 
-	printPartition(clpaState, "初期")
+	printPartitionToFile(clpaState, "初期", "initial_partition.txt")
+	err = writeGraphToDotFile("initial_partition.dot", clpaState, contractAddrs)
+	if err != nil {
+		t.Fatalf("Error writing .dot file: %v", err)
+	}
 
-	fmt.Println("シャード分割を実行")
+	// 実行時間の計測開始
+	start := time.Now()
+
+	// CLPAアルゴリズムを実行
 	clpaState.CLPA_Partition()
-	fmt.Println("シャード分割完了")
 
-	printPartition(clpaState, "CLPA後")
+	// 実行時間の計測終了
+	duration := time.Since(start)
+	fmt.Printf("CLPA_Partition execution time: %v\n", duration)
+
+	printPartitionToFile(clpaState, "CLPA後", "final_partition.txt")
 
 	err = writeGraphToDotFile("final_partition.dot", clpaState, contractAddrs)
 	if err != nil {
